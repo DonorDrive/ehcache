@@ -40,20 +40,12 @@ component {
 		return new Manager().setInstance(createObject("java", "net.sf.ehcache.CacheManager").newInstance(local.is));
 	}
 
-	array function getAllManagerNames() {
-		return arrayReduce(
-			createObject("java", "net.sf.ehcache.CacheManager").ALL_CACHE_MANAGERS,
-			function(l, v) {
-				arrayAppend(l, v.getName());
-
-				return l;
-			},
-			[]
-		);
-	}
-
 	Cache function getCache(required string name) {
 		return new Cache(name = arguments.name, managerName = getName());
+	}
+
+	array function getCacheNames() {
+		return getInstance().getCacheNames();
 	}
 
 	any function getInstance(string name) {
@@ -70,22 +62,34 @@ component {
 		return new Manager().setInstance(getInstance(arguments.name));
 	}
 
+	array function getManagerNames() {
+		return arrayReduce(
+			createObject("java", "net.sf.ehcache.CacheManager").ALL_CACHE_MANAGERS,
+			function(l, v) {
+				arrayAppend(l, v.getName());
+
+				return l;
+			},
+			[]
+		);
+	}
+
 	string function getName() {
 		return getInstance().getName();
 	}
 
 	boolean function managerExists(required string name) {
-		return arrayFindNoCase(getAllManagerNames(), arguments.name);
+		return arrayFindNoCase(getManagerNames(), arguments.name);
+	}
+
+	void function removeCache(required string name) {
+		getInstance().removeCache(arguments.name);
 	}
 
 	Manager function setInstance(required any cacheManager) {
 		variables.cm = arguments.cacheManager;
 
 		return this;
-	}
-
-	void function removeCache(required string name) {
-		getInstance().removeCache(arguments.name);
 	}
 
 }

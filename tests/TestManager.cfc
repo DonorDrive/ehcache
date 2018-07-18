@@ -91,8 +91,8 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals("mxunitCacheManager3", local.cacheManager.getName());
 	}
 
-	function test_getAllManagerNames() {
-		debug(variables.cacheManager.getAllManagerNames());
+	function test_getManagerNames() {
+		debug(variables.cacheManager.getManagerNames());
 	}
 
 	function test_getCache() {

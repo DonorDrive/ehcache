@@ -11,8 +11,13 @@
 		overflowToDisk="false"
 		timeToIdleSeconds="86400"
 		timeToLiveSeconds="86400"
-		statistics="false"
-	/>
+		statistics="false">
+		<searchable
+			allowDynamicIndexing="true"
+			keys="true"
+			values="true"
+		/>
+	</defaultCache>
 	<cache
 		name="mxunitCache"
 		maxEntriesLocalHeap="10000"

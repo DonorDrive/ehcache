@@ -8,55 +8,80 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		local.s = createObject("java", "java.util.HashMap").init();
 		local.v = element.getValue();
 
-		// ???
+		// we can't index this fella, (nothingtodohere)
 		if(!isStruct(local.v)) {
 			return;
 		}
 
 // TODO: is this list exhaustive?
 		for(local.field in variables.queryable.getFieldList()) {
-			if(structKeyExists(local.v, local.field) && variables.queryable.fieldIsFilterable(local.field)) {
+			if(variables.queryable.fieldIsFilterable(local.field)) {
 				switch(variables.queryable.getFieldSQLType(local.field)) {
-					case "bigint,date,time,timestamp":
-						if(isNumeric(local.v[local.field]) || isDate(local.v[local.field])) {
+					case "bigint":
+						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
 							local.s.put(local.field, javaCast("long", local.v[local.field]));
-						}
-						break;
-					case "char":
-						if(len(local.v[local.field]) > 0) {
-							local.s.put(local.field, javaCast("char", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("long", 0));
 						}
 						break;
 					case "bit":
-						if(isBoolean(local.v[local.field])) {
+						if(structKeyExists(local.v, local.field) && isBoolean(local.v[local.field])) {
 							local.s.put(local.field, javaCast("boolean", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("boolean", false));
 						}
 						break;
-					case "decimal,double,money,numeric":
-						if(isNumeric(local.v[local.field])) {
+					case "char":
+						if(structKeyExists(local.v, local.field) && len(local.v[local.field]) > 0) {
+							local.s.put(local.field, javaCast("char", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("char", javaCast("null", "")));
+						}
+						break;
+					case "date":
+					case "time":
+					case "timestamp":
+						if(structKeyExists(local.v, local.field) && isDate(local.v[local.field])) {
+							local.s.put(local.field, javaCast("long", local.v[local.field].getTime()));
+						} else {
+							local.s.put(local.field, javaCast("long", -1));
+						}
+						break;
+					case "decimal":
+					case "double":
+					case "money":
+					case "numeric":
+						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
 							local.s.put(local.field, javaCast("double", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("double", 0));
 						}
 						break;
-					case "float,real":
-						if(isNumeric(local.v[local.field])) {
+					case "float":
+					case "real":
+						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
 							local.s.put(local.field, javaCast("float", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("float", 0));
 						}
 						break;
-					case "integer,smallint,tinyint":
-						if(isNumeric(local.v[local.field])) {
+					case "integer":
+					case "smallint":
+					case "tinyint":
+						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
 							local.s.put(local.field, javaCast("int", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("int", 0));
 						}
 						break;
 					default:
-						if(len(local.v[local.field]) > 0) {
+						if(structKeyExists(local.v, local.field) && len(local.v[local.field]) > 0) {
 							local.s.put(local.field, javaCast("string", local.v[local.field]));
+						} else {
+							local.s.put(local.field, javaCast("string", javaCast("null", "")));
 						}
 						break;
 				};
-			}
-
-			if(!local.s.containsKey(local.field)) {
-				local.s.put(local.field, javaCast("null", ""));
 			}
 		}
 
@@ -64,159 +89,157 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 	}
 
 	query function executeSelect(required lib.sql.SelectStatement selectStatement, required numeric limit, required numeric offset) {
+		if(arrayLen(arguments.selectStatement.getAggregates()) > 0) {
+			throw(type = "UnsupportedOperation", message = "Aggregates are not supported in this implementation");
+		}
+
 		local.sql = arguments.selectStatement.getSelectSQL() & " FROM " & getInstance().getName();
 
 		if(len(arguments.selectStatement.getWhereSQL()) > 0) {
-// TODO
+			local.where = arguments.selectStatement.getWhereSQL();
+
+			// ehcache's query interface expects negation of the whole criteria
+			if(find("NOT IN", local.where) > 0) {
+				for(local.criteria in arguments.selectStatement.getWhereCriteria()) {
+					if(local.criteria.operator == "NOT IN") {
+						local.where = replace(local.where, local.criteria.statement, "(NOT(" & replace(local.criteria.statement, "NOT ", "") & "))");
+					}
+				}
+			}
+
+			for(local.parameter in arguments.selectStatement.getParameters()) {
+				local.whereValue = "";
+				// in the case of "IN/NOT IN" we must format/cast each value appropriately
+				for(local.value in local.parameter.value) {
+					if(local.parameter.cfsqltype CONTAINS "char") {
+						local.whereValue = listAppend(local.whereValue, "'" & local.value & "'");
+					} else if(local.parameter.cfsqltype == "bit") {
+						local.whereValue = listAppend(local.whereValue, "(bool)" & (local.value ? "'true'" : "'false'"));
+					} else if(arrayFindNoCase([ "date", "time", "timestamp" ], local.parameter.cfsqltype) && isDate(local.value)) {
+						// date/time values need to be explicitly manipulated to get the precision we need
+						local.whereValue = listAppend(local.whereValue, "(long)" & javaCast("long", parseDateTime(local.value).getTime()));
+					} else {
+						local.whereValue = listAppend(local.whereValue, local.value);
+					}
+				}
+
+				local.where = replace(local.where, "?", local.whereValue, "one");
+			}
+
+			local.sql &= " " & local.where;
 		}
 
 		if(len(arguments.selectStatement.getOrderBySQL()) > 0) {
 			local.sql &= " " & arguments.selectStatement.getOrderBySQL();
 		}
 
-		if(arguments.limit > 0) {
-			local.executionHints = createObject("java", "net.sf.ehcache.search.ExecutionHints").setResultBatchSize(arguments.limit);
+		try {
+			if(arguments.limit > 0) {
+				local.executionHints = createObject("java", "net.sf.ehcache.search.ExecutionHints").setResultBatchSize(arguments.limit);
 
-			local.results = variables.queryManager
-				.createQuery(local.sql)
-					.end()
-						.execute(local.executionHints);
-		} else {
-			local.results = variables.queryManager
-				.createQuery(local.sql)
-					.end()
-						.execute();
-		}
-
-		if(arguments.offset > 1) {
-			if(arguments.limit <= 0) {
-				throw(type = "InvalidLimit", message = "Limit must be furnished when offset is defined");
+				local.results = variables.queryManager
+					.createQuery(local.sql)
+						.end()
+							.execute(local.executionHints);
+			} else {
+				local.results = variables.queryManager
+					.createQuery(local.sql)
+						.end()
+							.execute();
 			}
-			local.resultsArray = local.results.range(arguments.offset, arguments.limit);
-		} else {
-			local.resultsArray = local.results.all();
+
+			if(arguments.offset > 1) {
+				if(arguments.limit <= 0) {
+					throw(type = "InvalidLimit", message = "Limit must be furnished when offset is defined");
+				}
+				local.resultsArray = local.results.range(arguments.offset, arguments.limit);
+			} else if(arguments.limit > 0) {
+				local.resultsArray = local.results.range(0, arguments.limit);
+			} else {
+				local.resultsArray = local.results.all();
+			}
+		} catch(net.sf.ehcache.search.attribute.UnknownAttributeException e) {
+			if(getInstance().getKeysNoDuplicateCheck().size() == 0) {
+				// our cache is empty - set an empty resultsArray
+				local.resultsArray = [];
+			} else {
+				rethrow;
+			}
 		}
 
+		// queryNew only supports a subset of the data types that queryparam does
 		local.fieldSQLTypes = listReduce(
 			arguments.selectStatement.getSelect(),
 			function(v, i) {
-				return listAppend(v, getFieldSQLType(i));
+				switch(getFieldSQLType(i)) {
+					case "char":
+						return listAppend(v, "varchar");
+						break;
+					case "float":
+					case "money":
+					case "numeric":
+					case "real":
+						return listAppend(v, "double");
+						break;
+					case "smallint":
+					case "tinyint":
+						return listAppend(v, "integer");
+						break;
+					default:
+						return listAppend(v, getFieldSQLType(i));
+						break;
+				};
 			},
 			""
 		);
 
-// TODO: enforce column type
-		local.query = queryNew(arguments.selectStatement.getSelect()); //local.fieldSQLTypes
+		local.query = queryNew(arguments.selectStatement.getSelect(), local.fieldSQLTypes);
 
 		for(local.result in local.resultsArray) {
 			local.row = {};
 
 			for(local.column in arguments.selectStatement.getSelect()) {
-// TODO: alter for type consistency
-				local.row[local.column] = local.result.getAttribute(getInstance().getSearchAttribute(local.column));
+				local.value = local.result.getAttribute(getInstance().getSearchAttribute(local.column));
+
+				if(structKeyExists(local, "value")) {
+					switch(getFieldSQLType(local.column)) {
+						case "date":
+						case "time":
+						case "timestamp":
+							// date/time values need to be explicitly manipulated to get the precision we need
+							if(local.value >= 0) {
+								local.row[local.column] = createObject("java", "java.util.Date").init(local.value);
+							} else {
+								local.row[local.column] = javaCast("null", "");
+							}
+							break;
+						default:
+							// the rest of our data types should be coerced correctly based on the column type defined above
+							local.row[local.column] = local.value;
+							break;
+					};
+				} else {
+					local.row[local.column] = javaCast("null", "");
+				}
 			}
 
 			queryAddRow(local.query, local.row);
 		}
 
-		// clean up after ourselves
-		local.results.discard();
-
-		return local.query;
-
-
-/*
-<cfset query = server.qm.createQuery(sql) />
-<cfset q = query.includeValues().end().execute() />
-<cfset r = q.all() />
-*/
-
-
-
-/*
-		var orderBySQL = arguments.selectStatement.getOrderBySQL();
-		var parameters = arguments.selectStatement.getParameters();
-		var selectSQL = arguments.selectStatement.getSelectSQL();
-		var whereSQL = arguments.selectStatement.getWhereSQL();
-
-		// format our incoming SQL to circumvent QoQ's case-sensitivity
-		if(parameters.len() > 0) {
-			for(local.i = 1; local.i <= parameters.len(); local.i++) {
-				if(parameters[local.i].cfsqltype CONTAINS "char") {
-					parameters[local.i].value = lCase(parameters[local.i].value);
-				}
-			}
-
-			for(local.i in arguments.selectStatement.getWhereCriteria()) {
-				if(getFieldSQLType(local.i.field) CONTAINS "char") {
-					local.formattedClause = local.i.statement.replaceNoCase(local.i.field, local.i.field & " IS NOT NULL AND LOWER(" & local.i.field & ")");
-					whereSQL = replaceNoCase(whereSQL, local.i.statement, "(" & local.formattedClause & ")", "one");
-				}
-			}
-		}
-
-		if(orderBySQL.len() > 0) {
-			for(local.i in arguments.selectStatement.getOrderCriteria()) {
-				local.field = listFirst(local.i, " ").trim();
-				// QoQ cant do calculated values inside ORDER BY - only as part of the SELECT
-				if(getFieldSQLType(local.field) CONTAINS "char") {
-					if(!findNoCase("_order_" & local.field, selectSQL)) {
-						selectSQL = listAppend(selectSQL, "LOWER(" & local.field & ") AS _order_" & local.field);
-					}
-
-					local.formattedClause = "_order_" & local.field & " " & listLast(local.i, " ");
-					orderBySQL = replace(orderBySQL, local.i, local.formattedClause);
-				}
-			}
-		}
-
-		var result = queryExecute(
-			selectSQL & " FROM query " & whereSQL & " " & orderBySQL,
-			parameters,
-			{ dbtype: "query" }
-		);
-
-		if(findNoCase("_order_", result.columnList)) {
-			result = queryExecute(
-				"SELECT #arguments.selectStatement.getSelect()# FROM result",
-				[],
-				{ dbtype: "query" }
-			);
-		}
-
-		// at this point, we know our working record count
-		var totalRecordCount = result.recordCount;
-
-		// result pagination, if necessary (this uses the underlying (undocumented) removeRows method so we don't need to run additional QoQ - IT IS ZERO-BASED)
-		if(arguments.offset > totalRecordCount) {
-			result.removeRows(0, totalRecordCount);
-		} else if(arguments.limit >= 0 || arguments.offset > 1) {
-			// default limit to the record count of the query
-			arguments.limit = (arguments.limit >= 0 && arguments.limit < totalRecordCount) ? arguments.limit : totalRecordCount;
-
-			var startRow = (arguments.offset - 1) + arguments.limit;
-
-			// remove from the end of the query first
-			if(startRow < totalRecordCount) {
-				result.removeRows(startRow, totalRecordCount - startRow);
-			}
-
-			// then remove from the front
-			if(arguments.offset - 1 > 0) {
-				result.removeRows(0, arguments.offset - 1);
-			}
-		}
-
-		result
+		local.query
 			.getMetadata()
 				.setExtendedMetadata({
 					cached: true,
-					recordCount: result.recordCount,
-					totalRecordCount: totalRecordCount
+					recordCount: arrayLen(local.resultsArray),
+					totalRecordCount: (structKeyExists(local, "results") ? local.results.size() : 0)
 				});
 
-		return result;
-*/
+		// clean up after ourselves
+		if(structKeyExists(local, "results")) {
+			local.results.discard();
+		}
+
+		return local.query;
 	}
 
 	boolean function fieldExists(required string fieldName) {
@@ -276,14 +299,13 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 	void function seedFromQueryable() {
 		queryableCheck();
 
-		queryEach(
-			variables.queryable.select().execute(),
-			function(row) {
-				local.key = getIdentifierField() & "_" & REReplace(row[getIdentifierField()], "[^A-Za-z0-9]", "", "all");
+		for(local.row in variables.queryable.select().execute()) {
+			local.key = getIdentifierField() & "_" & REReplace(local.row[getIdentifierField()], "[^A-Za-z0-9]", "", "all");
 
-				put(local.key, row);
+			if(!containsKey(local.key)) {
+				put(local.key, local.row);
 			}
-		);
+		}
 	}
 
 	lib.sql.SelectStatement function select(string fieldList = "*") {
