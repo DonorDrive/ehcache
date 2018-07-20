@@ -144,10 +144,25 @@ component extends = "mxunit.framework.TestCase" {
 	function test_select_where_in() {
 		local.result = variables.cache.select("id, foo").where("id IN ('#variables.query.id[1]#', '#variables.query.id[2]#', '#variables.query.id[3]#') OR foo IN ('5', '10', '15')").execute();
 
-		debug(local.result);
+//		debug(local.result);
 		assertEquals("foo,id", listSort(local.result.columnList, "textnocase"));
 		assertEquals("1,2,3,5,10,15", listSort(valueList(local.result.foo), "numeric"));
 		assertEquals(6, local.result.recordCount);
+
+		// test a single record
+		local.result = variables.cache.select("id, foo").where("id IN ('#variables.query.id[1]#'").execute();
+
+//		debug(local.result);
+		assertEquals("foo,id", listSort(local.result.columnList, "textnocase"));
+		assertEquals("1", listSort(valueList(local.result.foo), "numeric"));
+		assertEquals(1, local.result.recordCount);
+
+		// test negation of a single record
+		local.result = variables.cache.select("id, foo").where("id NOT IN ('#variables.query.id[1]#'").execute();
+
+//		debug(local.result);
+		assertEquals("foo,id", listSort(local.result.columnList, "textnocase"));
+		assertEquals(999, local.result.recordCount);
 	}
 
 //	function test_select_where_isnull_limit() {

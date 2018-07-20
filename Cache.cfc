@@ -96,26 +96,40 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		local.sql = arguments.selectStatement.getSelectSQL() & " FROM " & getInstance().getName();
 
 		if(len(arguments.selectStatement.getWhereSQL()) > 0) {
+			local.criteria = arguments.selectStatement.getWhereCriteria();
+			local.parameters = arguments.selectStatement.getParameters();
 			local.where = arguments.selectStatement.getWhereSQL();
 
-			// ehcache's query interface expects negation of the whole criteria
-			if(find("NOT IN", local.where) > 0) {
-				for(local.criteria in arguments.selectStatement.getWhereCriteria()) {
-					if(local.criteria.operator == "NOT IN") {
-						local.where = replace(local.where, local.criteria.statement, "(NOT(" & replace(local.criteria.statement, "NOT ", "") & "))");
-					}
-				}
-			}
+			for(local.i = 1; local.i <= arrayLen(local.criteria); local.i++) {
+				switch(local.criteria[local.i].operator) {
+					case "IN":
+					case "NOT IN":
+						// ehcache doesn't like performing "IN" on single-element sets
+						if(listLen(local.parameters[local.i].value) == 1) {
+							local.statement = local.criteria[local.i].field & " " & (local.criteria[local.i].operator == "IN" ? "=" : "!=") & " ?";
+						} else if(local.criteria[local.i].operator == "NOT IN") {
+							// ehcache's query interface expects negation of the whole criteria
+							local.statement = "(NOT(#local.criteria[local.i].field# IN (?)))";
+						} else {
+							local.statement = local.criteria[local.i].statement;
+						}
+						break;
+					default:
+						local.statement = local.criteria[local.i].statement;
+						break;
+				};
 
-			for(local.parameter in arguments.selectStatement.getParameters()) {
+				// replace the statement with our cache-friendly version
+				local.where = replace(local.where, local.criteria[local.i].statement, local.statement , "one");
+
 				local.whereValue = "";
-				// in the case of "IN/NOT IN" we must format/cast each value appropriately
-				for(local.value in local.parameter.value) {
-					if(local.parameter.cfsqltype CONTAINS "char") {
+				// in the case of "IN/NOT IN" we must format/cast each individual value appropriately
+				for(local.value in local.parameters[local.i].value) {
+					if(local.parameters[local.i].cfsqltype CONTAINS "char") {
 						local.whereValue = listAppend(local.whereValue, "'" & local.value & "'");
-					} else if(local.parameter.cfsqltype == "bit") {
+					} else if(local.parameters[local.i].cfsqltype == "bit") {
 						local.whereValue = listAppend(local.whereValue, "(bool)" & (local.value ? "'true'" : "'false'"));
-					} else if(arrayFindNoCase([ "date", "time", "timestamp" ], local.parameter.cfsqltype) && isDate(local.value)) {
+					} else if(arrayFindNoCase([ "date", "time", "timestamp" ], local.parameters[local.i].cfsqltype) && isDate(local.value)) {
 						// date/time values need to be explicitly manipulated to get the precision we need
 						local.whereValue = listAppend(local.whereValue, "(long)" & javaCast("long", parseDateTime(local.value).getTime()));
 					} else {
@@ -123,6 +137,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 					}
 				}
 
+				// replace our placeholders w/ the cache-friendly values
 				local.where = replace(local.where, "?", local.whereValue, "one");
 			}
 
