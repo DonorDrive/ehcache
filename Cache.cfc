@@ -163,10 +163,12 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 							.execute();
 			}
 
-			if(arguments.offset > 1) {
+			arguments.offset = arguments.offset - 1;
+			if(arguments.offset > 0) {
 				if(arguments.limit <= 0) {
 					throw(type = "InvalidLimit", message = "Limit must be furnished when offset is defined");
 				}
+
 				local.resultsArray = local.results.range(arguments.offset, arguments.limit);
 			} else if(arguments.limit > 0) {
 				local.resultsArray = local.results.range(0, arguments.limit);

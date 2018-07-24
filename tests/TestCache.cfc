@@ -107,19 +107,20 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals(0, local.result.recordCount);
 	}
 
-	function test_select_limit() {
-		local.result = variables.cache.select().execute(limit = 10);
+	function test_select_orderBy_limit() {
+		local.result = variables.cache.select().orderBy("foo DESC").execute(limit = 10);
 
-//		debug(local.result);
+		debug(local.result);
 		assertEquals(10, local.result.recordCount);
+		assertEquals("1000,999,998,997,996,995,994,993,992,991", valueList(local.result.foo));
 	}
 
 	function test_select_orderBy_limit_offset() {
-		local.result = variables.cache.select().orderBy("foo DESC").execute(limit = 10, offset = 10);
+		local.result = variables.cache.select().orderBy("foo ASC").execute(limit = 10, offset = 11);
 
-//		debug(local.result);
-		assertEquals("990,989,988,987,986,985,984,983,982,981", valueList(local.result.foo));
+		debug(local.result);
 		assertEquals(10, local.result.recordCount);
+		assertEquals("11,12,13,14,15,16,17,18,19,20", valueList(local.result.foo));
 	}
 
 	function test_select_where() {
