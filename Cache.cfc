@@ -307,6 +307,10 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		return super.getCache();
 	}
 
+	IQueryable function getQueryable() {
+		return variables.queryable;
+	}
+
 	private function queryableCheck() {
 		if(!structKeyExists(variables, "queryable")) {
 			throw(type = "MissingQueryable", message = "A Queryable implementation must be furnished before search operations are permitted");
