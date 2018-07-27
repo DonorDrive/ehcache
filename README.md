@@ -1,10 +1,10 @@
 # ehcache
 A ColdFusion facade for more-complex Ehcache interactions
 
-##Motivation
+## Motivation
 DonorDrive started with the version Ehcache that shipped with Adobe ColdFusion. Overtime, we had to get deeper into the Java guts of Ehcache to manage our caches. The goal of this package is create a bridge between CF's simple cache* methods, and the verbose interface that Ehcache offers natively.
 
-##Getting Started
+## Getting Started
 The `ehcache` package assumes that it will reside in a `lib` directory under the web root, or mapped in the consuming application.
 
 If you plan to leverage replication, or distribution strategies, you must get new jars from http://www.ehcache.org or talk to the lovely folks over at Software AG. The code contained herein is Ehcache 2.8+ compatible.
@@ -13,7 +13,7 @@ In order to leverage the `IQueryable` interface for cache searching, you must al
 
 **Note**: for large caches, you WILL see less-than-optimal query performance. Caches that aren't backed by Big Memory are queried using brute-force.
 
-###How do I use this?
+### How do I use this?
 Conceptually, there are 3 major entities within Ehcache: Managers, Caches, and Elements.
 
 **Manager**: As the name implies, manages one or more Caches. Cache replication/distribution strategies are dictated at the Manager level. Sizing and eviction constraints can be imposed in terms of location (on-heap/off-heap) and raw memory size.
