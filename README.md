@@ -11,7 +11,7 @@ If you plan to leverage replication, or distribution strategies, you must get ne
 
 In order to leverage the `IQueryable` interface for cache searching, you must also grab our `sql` project: https://github.com/DonorDrive/sql
 
-**Note**: for large caches, you WILL see less-than-optimal query performance. Caches that aren't backed by Big Memory are queried using brute-force.
+**Note**: Unless your cache is backed by Big Memory, you may see less-than-optimal query performance, as elements are queried using brute-force.
 
 ### How do I use this?
 Conceptually, there are 3 major entities within Ehcache: Managers, Caches, and Elements.
