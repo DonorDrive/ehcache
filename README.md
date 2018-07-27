@@ -17,7 +17,9 @@ In order to leverage the `IQueryable` interface for cache searching, you must al
 Conceptually, there are 3 major entities within Ehcache: Managers, Caches, and Elements.
 
 **Manager**: As the name implies, manages one or more Caches. Cache replication/distribution strategies are dictated at the Manager level. Sizing and eviction constraints can be imposed in terms of location (on-heap/off-heap) and raw memory size.
+
 **Cache**: CF refers to these as "cache regions." A Cache is a collection of Elements. Searching (if configured) happens at the Cache-level. Sizing and eviction constraints can be imposed in terms of raw memory size, or number of elements.
+
 **Element**: A value associated to a key. Elements are put into a Cache for persistence.
 
 *tl;dr: Ehcache allows you to put Elements into a Cache. Cache behavior is dictated by the Manager that created it.*
