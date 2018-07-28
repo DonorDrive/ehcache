@@ -5,11 +5,9 @@ A ColdFusion facade for more-complex Ehcache interactions
 DonorDrive started with the version Ehcache that shipped with Adobe ColdFusion. Overtime, we had to get deeper into the Java guts of Ehcache to manage our caches. The goal of this package is create a bridge between CF's simple cache* methods, and the verbose interface that Ehcache offers natively.
 
 ## Getting Started
-The `ehcache` package assumes that it will reside in a `lib` directory under the web root, or mapped in the consuming application.
+The `ehcache` package assumes that it will reside in a `lib` directory under the web root, or mapped in the consuming application. You *must* also use our `lib.util` package for this to work (https://github.com/DonorDrive/util). In order to leverage the `IQueryable` interface for cache searching, you must also grab our `sql` project (https://github.com/DonorDrive/sql).
 
 If you plan to leverage replication, or distribution strategies, you must get new jars from http://www.ehcache.org or talk to the lovely folks over at Software AG. The code contained herein is Ehcache 2.8+ compatible.
-
-In order to leverage the `IQueryable` interface for cache searching, you must also grab our `sql` project: https://github.com/DonorDrive/sql
 
 **Note**: Unless your cache is backed by Big Memory, you may see less-than-optimal query performance, as elements are queried using brute-force.
 
@@ -43,5 +41,9 @@ myCache.setQueryable(myQoQ).seedFromQueryable();
 Subsequently, querying the cache would look something like:
 
 `myResults = myCache.select().where("foo > 5").orderBy("foo ASC").execute(limit = 5);`
+
+If you are simply instantiating against the singleton Manager, you can still leverage native CF cache methods alongside the searching functionality outlined above (https://helpx.adobe.com/coldfusion/cfml-reference/coldfusion-functions/functions-by-category/cache-functions.html).
+
+Otherwise, the `Cache` object supports the IContainer interface outlined in the util package linked above.
 
 For a more in-depth example, please refer to the unit tests.
