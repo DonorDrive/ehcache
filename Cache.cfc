@@ -13,7 +13,6 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 			return;
 		}
 
-// TODO: is this list exhaustive?
 		for(local.field in variables.queryable.getFieldList()) {
 			if(variables.queryable.fieldIsFilterable(local.field)) {
 				switch(variables.queryable.getFieldSQLType(local.field)) {
