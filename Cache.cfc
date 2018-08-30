@@ -176,11 +176,16 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 			}
 		} catch(net.sf.ehcache.search.attribute.UnknownAttributeException e) {
 			if(getInstance().getKeysNoDuplicateCheck().size() == 0) {
+				local.cacheException = true;
 				// our cache is empty - set an empty resultsArray
 				local.resultsArray = [];
 			} else {
 				rethrow;
 			}
+		} catch(org.terracotta.toolkit.nonstop.NonStopException e) {
+			// terracotta-backed caches throw this exception during a service interruption
+			local.cacheException = true;
+			local.resultsArray = [];
 		}
 
 		// queryNew only supports a subset of the data types that queryparam does
@@ -245,7 +250,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		local.query
 			.getMetadata()
 				.setExtendedMetadata({
-					cached: true,
+					cached: !structKeyExists(local, "cacheException"),
 					recordCount: arrayLen(local.resultsArray),
 					totalRecordCount: (structKeyExists(local, "results") ? local.results.size() : 0)
 				});

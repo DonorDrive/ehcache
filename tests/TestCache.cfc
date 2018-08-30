@@ -183,6 +183,12 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals(12, local.result.recordCount);
 	}
 
+	function test_select_where_DD_12824() {
+		local.result = variables.cache.select().where("createdTimestamp < '#dateTimeFormat(now(), 'yyyy-mm-dd HH:nn:ss.l')#' AND bar = 1").execute();
+
+		debug(local.result);
+	}
+
 	function test_select_where_orderBy_limit() {
 		local.result = variables.cache.select().where("foo <= 500").orderBy("foo DESC").execute(limit = 10);
 

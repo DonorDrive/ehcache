@@ -26,7 +26,15 @@ component {
 		return getCache(arguments.name);
 	}
 
-	boolean function cacheExists(required string name) {
+	boolean function cacheExists(required string name, boolean deepSearch = false) {
+		if(arguments.deepSearch) {
+			for(local.managerName in getManagerNames()) {
+				if(getInstance(local.managerName).cacheExists(arguments.name)) {
+					return true;
+				}
+			}
+		}
+
 		return getInstance().cacheExists(arguments.name);
 	}
 
