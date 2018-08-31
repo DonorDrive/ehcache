@@ -5,11 +5,11 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 	}
 
 	any function attributesFor(required any element) {
-		local.s = createObject("java", "java.util.HashMap").init();
-		local.v = element.getValue();
+		local.indexedAttributes = createObject("java", "java.util.HashMap").init();
+		local.elementValue = element.getValue();
 
 		// we can't index this fella, (nothingtodohere)
-		if(!isStruct(local.v)) {
+		if(!isStruct(local.elementValue)) {
 			return;
 		}
 
@@ -17,74 +17,74 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 			if(variables.queryable.fieldIsFilterable(local.field)) {
 				switch(variables.queryable.getFieldSQLType(local.field)) {
 					case "bigint":
-						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
-							local.s.put(local.field, javaCast("long", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && isNumeric(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("long", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("long", 0));
+							local.indexedAttributes.put(local.field, javaCast("long", 0));
 						}
 						break;
 					case "bit":
-						if(structKeyExists(local.v, local.field) && isBoolean(local.v[local.field])) {
-							local.s.put(local.field, javaCast("boolean", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && isBoolean(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("boolean", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("boolean", false));
+							local.indexedAttributes.put(local.field, javaCast("boolean", false));
 						}
 						break;
 					case "char":
-						if(structKeyExists(local.v, local.field) && len(local.v[local.field]) > 0) {
-							local.s.put(local.field, javaCast("char", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
+							local.indexedAttributes.put(local.field, javaCast("char", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("char", javaCast("null", "")));
+							local.indexedAttributes.put(local.field, javaCast("char", javaCast("null", "")));
 						}
 						break;
 					case "date":
 					case "time":
 					case "timestamp":
-						if(structKeyExists(local.v, local.field) && isDate(local.v[local.field])) {
-							local.s.put(local.field, javaCast("long", local.v[local.field].getTime()));
+						if(structKeyExists(local.elementValue, local.field) && isDate(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("long", local.elementValue[local.field].getTime()));
 						} else {
-							local.s.put(local.field, javaCast("long", -1));
+							local.indexedAttributes.put(local.field, javaCast("long", -1));
 						}
 						break;
 					case "decimal":
 					case "double":
 					case "money":
 					case "numeric":
-						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
-							local.s.put(local.field, javaCast("double", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && isNumeric(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("double", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("double", 0));
+							local.indexedAttributes.put(local.field, javaCast("double", 0));
 						}
 						break;
 					case "float":
 					case "real":
-						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
-							local.s.put(local.field, javaCast("float", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && isNumeric(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("float", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("float", 0));
+							local.indexedAttributes.put(local.field, javaCast("float", 0));
 						}
 						break;
 					case "integer":
 					case "smallint":
 					case "tinyint":
-						if(structKeyExists(local.v, local.field) && isNumeric(local.v[local.field])) {
-							local.s.put(local.field, javaCast("int", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && isNumeric(local.elementValue[local.field])) {
+							local.indexedAttributes.put(local.field, javaCast("int", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("int", 0));
+							local.indexedAttributes.put(local.field, javaCast("int", 0));
 						}
 						break;
 					default:
-						if(structKeyExists(local.v, local.field) && len(local.v[local.field]) > 0) {
-							local.s.put(local.field, javaCast("string", local.v[local.field]));
+						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
+							local.indexedAttributes.put(local.field, javaCast("string", local.elementValue[local.field]));
 						} else {
-							local.s.put(local.field, javaCast("string", javaCast("null", "")));
+							local.indexedAttributes.put(local.field, javaCast("string", javaCast("null", "")));
 						}
 						break;
 				};
 			}
 		}
 
-		return local.s;
+		return local.indexedAttributes;
 	}
 
 	query function executeSelect(required lib.sql.SelectStatement selectStatement, required numeric limit, required numeric offset) {
