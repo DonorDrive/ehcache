@@ -7,7 +7,7 @@ component {
 	*/
 
 	Manager function init() {
-    	return this;
+		return this;
 	}
 
 	Cache function addCache(required string name, string copyFrom) {
@@ -19,7 +19,7 @@ component {
 
 				getInstance().addCacheIfAbsent(createObject("java", "net.sf.ehcache.Cache").init(local.config));
 			} else {
-                getInstance().addCacheIfAbsent(arguments.name);
+				getInstance().addCacheIfAbsent(arguments.name);
 			}
 		}
 

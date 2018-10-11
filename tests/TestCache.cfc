@@ -75,6 +75,26 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals(1000, listLen(local.keyList));
 	}
 
+	function test_seedFromQueryable_overwrite() {
+		variables.cache.seedFromQueryable();
+
+		local.key = listFirst(variables.cache.keyList());
+		local.element = variables.cache.get(local.key);
+		local.element.foo = 1337;
+
+		variables.cache.put(local.key, local.element);
+
+//		debug(local.element);
+
+		variables.cache.seedFromQueryable(overwrite = true);
+
+		local.overwriteElement = variables.cache.get(local.key);
+
+//		debug(local.overwriteElement);
+
+		assertNotEquals(local.element.foo, local.overwriteElement.foo);
+	}
+
 	function test_select() {
 		local.select = variables.cache.select();
 //		debug(local.select);

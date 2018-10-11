@@ -321,13 +321,13 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		}
 	}
 
-	void function seedFromQueryable() {
+	void function seedFromQueryable(boolean overwrite = false) {
 		queryableCheck();
 
 		for(local.row in variables.queryable.select().execute()) {
 			local.key = getIdentifierField() & "_" & REReplace(local.row[getIdentifierField()], "[^A-Za-z0-9]", "", "all");
 
-			if(!containsKey(local.key)) {
+			if(arguments.overwrite || !containsKey(local.key)) {
 				put(local.key, local.row);
 			}
 		}
