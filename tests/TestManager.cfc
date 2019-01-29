@@ -99,10 +99,6 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals("lib.ehcache.Cache", getMetadata(variables.cacheManager.getCache("mxunitCache")).fullName);
 	}
 
-	function test_getInstance() {
-		debug(variables.cacheManager.getInstance());
-	}
-
 	function test_managerExists() {
 		assertTrue(variables.cacheManager.managerExists("mxunitCacheManager"));
 		assertFalse(variables.cacheManager.managerExists("flargle"));

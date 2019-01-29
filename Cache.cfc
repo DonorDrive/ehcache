@@ -32,7 +32,8 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 						break;
 					case "char":
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
-							local.indexedAttributes.put(local.field, javaCast("char", local.elementValue[local.field]));
+							// lower casing ensures a case-insensitive sort
+							local.indexedAttributes.put(local.field, javaCast("char", lCase(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("char", javaCast("null", "")));
 						}
@@ -75,7 +76,8 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 						break;
 					default:
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
-							local.indexedAttributes.put(local.field, javaCast("string", local.elementValue[local.field]));
+							// lower casing ensures a case-insensitive sort
+							local.indexedAttributes.put(local.field, javaCast("string", lCase(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("string", javaCast("null", "")));
 						}
@@ -87,12 +89,22 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		return local.indexedAttributes;
 	}
 
+	boolean function containsRow() {
+		queryableCheck();
+
+		if(structKeyExists(arguments, getIdentifierField())) {
+			return super.containsKey(getRowKey(argumentCollection = arguments));
+		}
+
+		return false;
+	}
+
 	query function executeSelect(required lib.sql.SelectStatement selectStatement, required numeric limit, required numeric offset) {
 		if(arrayLen(arguments.selectStatement.getAggregates()) > 0) {
 			throw(type = "UnsupportedOperation", message = "Aggregates are not supported in this implementation");
 		}
 
-		local.sql = arguments.selectStatement.getSelectSQL() & " FROM " & getInstance().getName();
+		local.sql = "SELECT key FROM " & getCache().getName();
 
 		if(len(arguments.selectStatement.getWhereSQL()) > 0) {
 			local.criteria = arguments.selectStatement.getWhereCriteria();
@@ -104,7 +116,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 					case "IN":
 					case "NOT IN":
 						// ehcache doesn't like performing "IN" on single-element sets
-						if(listLen(local.parameters[local.i].value) == 1) {
+						if(listLen(local.parameters[local.i].value, chr(31)) == 1) {
 							local.statement = local.criteria[local.i].field & " " & (local.criteria[local.i].operator == "IN" ? "=" : "!=") & " ?";
 						} else if(local.criteria[local.i].operator == "NOT IN") {
 							// ehcache's query interface expects negation of the whole criteria
@@ -112,6 +124,10 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 						} else {
 							local.statement = local.criteria[local.i].statement;
 						}
+						break;
+					case "LIKE":
+						// replace w/ case-insensitive version
+						local.statement = replaceNoCase(local.criteria[local.i].statement, "LIKE", "ILIKE");
 						break;
 					default:
 						local.statement = local.criteria[local.i].statement;
@@ -123,17 +139,42 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 
 				local.whereValue = "";
 				// in the case of "IN/NOT IN" we must format/cast each individual value appropriately
-				for(local.value in local.parameters[local.i].value) {
-					if(local.parameters[local.i].cfsqltype CONTAINS "char") {
-						local.whereValue = listAppend(local.whereValue, "'" & local.value & "'");
-					} else if(local.parameters[local.i].cfsqltype == "bit") {
-						local.whereValue = listAppend(local.whereValue, "(bool)" & (local.value ? "'true'" : "'false'"));
-					} else if(arrayFindNoCase([ "date", "time", "timestamp" ], local.parameters[local.i].cfsqltype) && isDate(local.value)) {
-						// date/time values need to be explicitly manipulated to get the precision we need
-						local.whereValue = listAppend(local.whereValue, "(long)" & javaCast("long", parseDateTime(local.value).getTime()));
-					} else {
-						local.whereValue = listAppend(local.whereValue, local.value);
-					}
+				for(local.value in listToArray(local.parameters[local.i].value, chr(31))) {
+					// javaCast'ing here ensures correct value precision
+					switch(local.parameters[local.i].cfsqltype) {
+						case "bigint":
+							local.whereValue = listAppend(local.whereValue, "(long)" & javaCast("long", local.value));
+							break;
+						case "bit":
+							local.whereValue = listAppend(local.whereValue, "(bool)" & (local.value ? "'true'" : "'false'"));
+							break;
+						case "date":
+						case "time":
+						case "timestamp":
+							local.whereValue = listAppend(local.whereValue, "(long)" & javaCast("long", parseDateTime(local.value).getTime()));
+							break;
+						case "decimal":
+						case "double":
+						case "money":
+						case "numeric":
+							local.whereValue = listAppend(local.whereValue, "(double)'" & javaCast("double", local.value) & "'");
+							break;
+						case "float":
+						case "real":
+							local.whereValue = listAppend(local.whereValue, "(float)'" & javaCast("float", local.value) & "'");
+							break;
+						case "integer":
+						case "smallint":
+						case "tinyint":
+							local.whereValue = listAppend(local.whereValue, "(int)" & javaCast("int", local.value));
+							break;
+						default:
+							// default to string/char - replacing SQL wildcards w/ ILIKE wildcards
+							local.value = replace(local.value, "%", "*", "all");
+							local.value = replace(local.value, "_", "?", "all");
+							local.whereValue = listAppend(local.whereValue, "'" & local.value & "'");
+							break;
+					};
 				}
 
 				// replace our placeholders w/ the cache-friendly values
@@ -144,7 +185,12 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		}
 
 		if(len(arguments.selectStatement.getOrderBySQL()) > 0) {
-			local.sql &= " " & arguments.selectStatement.getOrderBySQL();
+			/*
+				a known bug/workaround for incorrect sort direction of subsequent order-by fields;
+				instead of a list, each clause is its own distinct ORDER BY :eyeroll:
+				`ORDER BY col1 DESC, col2 ASC` becomes `ORDER BY col1 DESC ORDER BY col2 ASC`
+			*/
+			local.sql &= " " & replace(arguments.selectStatement.getOrderBySQL(), ",", " ORDER BY ", "all");
 		}
 
 		try {
@@ -168,14 +214,17 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 					throw(type = "InvalidLimit", message = "Limit must be furnished when offset is defined");
 				}
 
-				local.resultsArray = local.results.range(arguments.offset, arguments.limit);
+				local.resultsArray = duplicate(local.results.range(arguments.offset, arguments.limit));
 			} else if(arguments.limit > 0) {
-				local.resultsArray = local.results.range(0, arguments.limit);
+				local.resultsArray = duplicate(local.results.range(0, arguments.limit));
 			} else {
-				local.resultsArray = local.results.all();
+				local.resultsArray = duplicate(local.results.all());
 			}
+
+			local.resultsLength = local.results.size();
+			local.results.discard();
 		} catch(net.sf.ehcache.search.attribute.UnknownAttributeException e) {
-			if(getInstance().getKeysNoDuplicateCheck().size() == 0) {
+			if(getCache().getKeysNoDuplicateCheck().size() == 0) {
 				local.cacheException = true;
 				// our cache is empty - set an empty resultsArray
 				local.resultsArray = [];
@@ -217,34 +266,24 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		local.query = queryNew(arguments.selectStatement.getSelect(), local.fieldSQLTypes);
 
 		for(local.result in local.resultsArray) {
-			local.row = {};
+			// use the underlying Ehcache method, so we can avoid some extraneous logic under load
+			local.element = getCache().get(local.result.getKey());
 
-			for(local.column in arguments.selectStatement.getSelect()) {
-				local.value = local.result.getAttribute(getInstance().getSearchAttribute(local.column));
+			if(structKeyExists(local, "element")) {
+				local.element = local.element.getObjectValue();
 
-				if(structKeyExists(local, "value")) {
-					switch(getFieldSQLType(local.column)) {
-						case "date":
-						case "time":
-						case "timestamp":
-							// date/time values need to be explicitly manipulated to get the precision we need
-							if(local.value >= 0) {
-								local.row[local.column] = createObject("java", "java.util.Date").init(local.value);
-							} else {
-								local.row[local.column] = javaCast("null", "");
-							}
-							break;
-						default:
-							// the rest of our data types should be coerced correctly based on the column type defined above
-							local.row[local.column] = local.value;
-							break;
-					};
-				} else {
-					local.row[local.column] = javaCast("null", "");
+				local.row = {};
+
+				for(local.column in arguments.selectStatement.getSelect()) {
+					if(structKeyExists(local.element, local.column)) {
+						local.row[local.column] = local.element[local.column];
+					} else {
+						local.row[local.column] = javaCast("null", "");
+					}
 				}
-			}
 
-			queryAddRow(local.query, local.row);
+				queryAddRow(local.query, local.row);
+			}
 		}
 
 		local.query
@@ -252,13 +291,8 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 				.setExtendedMetadata({
 					cached: !structKeyExists(local, "cacheException"),
 					recordCount: arrayLen(local.resultsArray),
-					totalRecordCount: (structKeyExists(local, "results") ? local.results.size() : 0)
+					totalRecordCount: (structKeyExists(local, "resultsLength") ? local.resultsLength : 0)
 				});
-
-		// clean up after ourselves
-		if(structKeyExists(local, "results")) {
-			local.results.discard();
-		}
 
 		return local.query;
 	}
@@ -304,15 +338,48 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 	}
 
 	string function getIdentifierField() {
-		return variables.queryable.getIdentifierField();
-	}
+		queryableCheck();
 
-	any function getInstance() {
-		return super.getCache();
+		return variables.queryable.getIdentifierField();
 	}
 
 	IQueryable function getQueryable() {
 		return variables.queryable;
+	}
+
+	/**
+	* @hint assumes that the identifying field will be passed along as a named argument: `getRow(id = 123)`
+	*/
+	any function getRow() {
+		queryableCheck();
+
+		if(structKeyExists(arguments, getIdentifierField())) {
+			return super.get(getRowKey(argumentCollection = arguments));
+		}
+	}
+
+	/**
+	* @hint assumes that the identifying field will be passed along as a named argument: `getRowKey(id = 123)`
+	*/
+	string function getRowKey() {
+		return getIdentifierField() & "_" & REReplace(arguments[getIdentifierField()], "[^A-Za-z0-9]", "", "all");
+	}
+
+	boolean function isClustered() {
+		return getCache().isTerracottaClustered();
+	}
+
+	/**
+	* @hint assumes that the identifying field will be present as a value within `row` argument
+	*/
+	void function putRow(required struct row) {
+		queryableCheck();
+
+		if(structKeyExists(arguments.row, getIdentifierField())) {
+			local.rowKey = getRowKey(argumentCollection = arguments.row);
+
+			super.put(local.rowKey, arguments.row);
+		}
 	}
 
 	private function queryableCheck() {
@@ -321,14 +388,21 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		}
 	}
 
+	/**
+	* @hint assumes that the identifying field will be passed along as a named argument: `removeRow(id = 123)`
+	*/
+	void function removeRow() {
+		super.remove(getRowKey(argumentCollection = arguments));
+	}
+
 	void function seedFromQueryable(boolean overwrite = false) {
 		queryableCheck();
 
 		for(local.row in variables.queryable.select().execute()) {
-			local.key = getIdentifierField() & "_" & REReplace(local.row[getIdentifierField()], "[^A-Za-z0-9]", "", "all");
+			local.key = getRowKey(argumentCollection = local.row);
 
-			if(arguments.overwrite || !containsKey(local.key)) {
-				put(local.key, local.row);
+			if(arguments.overwrite || !super.containsKey(local.key)) {
+				super.put(local.key, local.row);
 			}
 		}
 	}
@@ -340,7 +414,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 	}
 
 	Cache function setQueryable(required lib.sql.IQueryable queryable) {
-		if(!getInstance().isSearchable()) {
+		if(!getCache().isSearchable()) {
 			throw(type = "IncompatibleCache", message = "This Cache has not been configured for search");
 		} else if(isNull(arguments.queryable.getIdentifierField())) {
 			throw(type = "MissingIdentifierField", message = "No identifierField has been defined for this IQueryable");
@@ -350,7 +424,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 
 		try {
 			local.proxy = createDynamicProxy(this, [ "net.sf.ehcache.search.attribute.DynamicAttributesExtractor" ]);
-			getInstance().registerDynamicAttributesExtractor(local.proxy);
+			getCache().registerDynamicAttributesExtractor(local.proxy);
 		} catch(Any e) {
 			// this fella doesn't support DynamicAttributesExtractor
 		}
@@ -358,7 +432,7 @@ component extends = "lib.util.EhcacheContainer" implements = "lib.sql.IQueryable
 		// http://www.ehcache.org/apidocs/2.10.4/net/sf/ehcache/search/query/QueryManager.html
 		variables.queryManager = createObject("java", "net.sf.ehcache.search.query.QueryManagerBuilder")
 			.newQueryManagerBuilder()
-				.addCache(getInstance())
+				.addCache(getCache())
 					.build();
 
 		return this;

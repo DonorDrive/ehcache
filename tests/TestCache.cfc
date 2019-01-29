@@ -10,11 +10,11 @@ component extends = "mxunit.framework.TestCase" {
 			variables.cache = variables.manager.addCache(name = "mxunitTestCache", copyFrom = "mxunitCache");
 
 			variables.query = queryNew(
-				"id, createdTimestamp, createdDate, createdTime, foo, bar",
-				"varchar, timestamp, date, time, integer, bit"
+				"id, createdTimestamp, createdDate, createdTime, foo, bar, letter",
+				"varchar, timestamp, date, time, integer, bit, varchar"
 			);
 
-			local.now = now();
+			variables.now = now();
 			for(local.i = 1; local.i <= 1000; local.i++) {
 				queryAddRow(
 					variables.query,
@@ -22,9 +22,10 @@ component extends = "mxunit.framework.TestCase" {
 						"id": createUUID(),
 						"bar": (!randRange(1, 3) % 2 ? local.i % 2 : javaCast("null", "")),
 						"foo": local.i,
-						"createdTimestamp": (!randRange(1, 3) % 2 ? local.now : javaCast("null", "")),
-						"createdDate": (!randRange(1, 3) % 2 ? local.now : javaCast("null", "")),
-						"createdTime": (!randRange(1, 3) % 2 ? local.now : javaCast("null", ""))
+						"createdTimestamp": (!randRange(1, 3) % 2 ? variables.now : javaCast("null", "")),
+						"createdDate": (!randRange(1, 3) % 2 ? variables.now : javaCast("null", "")),
+						"createdTime": (!randRange(1, 3) % 2 ? variables.now : javaCast("null", "")),
+						"letter": chr(64 + randRange(1, 25) + (local.i % 2 ? 32 : 0))
 					}
 				);
 			}
@@ -37,8 +38,13 @@ component extends = "mxunit.framework.TestCase" {
 		}
 	}
 
-	function test_fieldExists() {
+	function test_containsRow() {
 // debug(variables.exception); return;
+		assertTrue(variables.cache.containsRow(id = variables.query.id[1]));
+		assertFalse(variables.cache.containsRow(id = "boo-boo-butt"));
+	}
+
+	function test_fieldExists() {
 		assertTrue(variables.cache.fieldExists("id"));
 		assertFalse(variables.cache.fieldExists("asdfasfasdf"));
 	}
@@ -63,8 +69,34 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals("bit", variables.cache.getFieldSQLType("bar"));
 	}
 
-	function test_getInstance() {
-//		debug(variables.cache.getInstance());
+	function test_getRow() {
+		local.compare = variables.cache.get(variables.cache.getRowKey(argumentCollection = queryGetRow(variables.query, 1)));
+		local.row = variables.cache.getRow(id = local.compare.id);
+
+		assertEquals(local.compare, local.row);
+	}
+
+	function test_isClustered() {
+		assertEquals(variables.cache.getCache().isTerracottaClustered(), variables.cache.isClustered());
+	}
+
+	function test_putRow() {
+		local.queryRow = queryGetRow(variables.query, 1);
+		local.queryRow.createdTimestamp = createDateTime(1948, 12, 10, 10, 0, 0);
+		variables.cache.putRow(local.queryRow);
+		local.compare = variables.cache.get(variables.cache.getRowKey(argumentCollection = local.queryRow));
+
+		assertEquals(createDateTime(1948, 12, 10, 10, 0, 0), local.compare.createdTimestamp);
+	}
+
+	function test_removeRow() {
+		local.queryRow = queryGetRow(variables.query, 1);
+		local.queryRow.id = createUUID();
+		variables.cache.putRow(local.queryRow);
+
+		assertTrue(variables.cache.containsRow(id = local.queryRow.id));
+		variables.cache.removeRow(id = local.queryRow.id);
+		assertFalse(variables.cache.containsRow(id = local.queryRow.id));
 	}
 
 	function test_seedFromQueryable() {
@@ -101,17 +133,17 @@ component extends = "mxunit.framework.TestCase" {
 
 		local.result = local.select.execute();
 //		debug(local.result);
+
 		assertEquals(1000, local.result.recordCount);
 	}
 
 	function test_select_aggregate() {
 		try {
 			variables.cache.select("SUM(foo)").execute();
+			fail("should not be here");
 		} catch(Any e) {
-			local.exception = e;
+			assertEquals("UnsupportedOperation", e.type);
 		}
-
-		assertTrue(structKeyExists(local, "exception") && local.exception.type == "UnsupportedOperation");
 	}
 
 	function test_select_empty() {
@@ -127,6 +159,19 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals(0, local.result.recordCount);
 	}
 
+	function test_select_orderBy_DD_13345() {
+		local.result = variables.cache.select().orderBy("bar DESC, foo ASC").execute(limit = 10);
+
+		debug(local.result);
+		assertEquals(10, local.result.recordCount);
+	}
+
+	function test_select_orderBy_DD_13346() {
+		local.result = variables.cache.select("letter, foo").orderBy("letter ASC, foo DESC").execute();
+
+		debug(local.result);
+	}
+
 	function test_select_orderBy_limit() {
 		local.result = variables.cache.select().orderBy("foo DESC").execute(limit = 10);
 
@@ -140,6 +185,8 @@ component extends = "mxunit.framework.TestCase" {
 
 		debug(local.result);
 		assertEquals(10, local.result.recordCount);
+		debug(local.result.getMetadata().getExtendedMetadata().totalRecordCount);
+		assertEquals(1000, local.result.getMetadata().getExtendedMetadata().totalRecordCount);
 		assertEquals("11,12,13,14,15,16,17,18,19,20", valueList(local.result.foo));
 	}
 
@@ -155,7 +202,7 @@ component extends = "mxunit.framework.TestCase" {
 	}
 
 	function test_select_where_compound_limit() {
-		local.result = variables.cache.select().where("bar = 1 AND createdTimestamp >= '#dateTimeFormat(dateAdd("s", -10, now()), "yyyy-mm-dd HH:nn:ss.l")#'").execute(limit = 10);
+		local.result = variables.cache.select().where("bar = 1 AND createdTimestamp >= '#dateTimeFormat(dateAdd("s", -10, variables.now), "yyyy-mm-dd HH:nn:ss.l")#'").execute(limit = 10);
 
 //		debug(local.result);
 //		debug(local.result.getMetadata().getExtendedMetadata());
@@ -206,6 +253,22 @@ component extends = "mxunit.framework.TestCase" {
 	function test_select_where_DD_12824() {
 		local.result = variables.cache.select().where("createdTimestamp < '#dateTimeFormat(now(), 'yyyy-mm-dd HH:nn:ss.l')#' AND bar = 1").execute();
 
+		debug(local.result);
+	}
+
+	function test_select_where_DD_13660() {
+		local.result = variables.cache.select("letter, foo").where("foo > 990.00").execute();
+
+		debug(local.result);
+	}
+
+	function test_select_where_DD_13763() {
+		local.where = "id LIKE '%#listFirst(lCase(variables.query.id[1]), '-')#%'";
+		local.result = variables.cache.select().where(local.where).orderBy("foo ASC").execute();
+
+		assertTrue(local.result.recordCount >= 1);
+
+		debug(local.where);
 		debug(local.result);
 	}
 

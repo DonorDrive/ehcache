@@ -11,15 +11,15 @@ component {
 	}
 
 	Cache function addCache(required string name, string copyFrom) {
-		if(!getInstance().cacheExists(arguments.name)) {
+		if(!getCacheManager().cacheExists(arguments.name)) {
 			if(structKeyExists(arguments, "copyFrom")) {
-				local.config = getInstance().getCache(arguments.copyFrom).getCacheConfiguration().clone();
+				local.config = getCacheManager().getCache(arguments.copyFrom).getCacheConfiguration().clone();
 
 				local.config.name(arguments.name);
 
-				getInstance().addCacheIfAbsent(createObject("java", "net.sf.ehcache.Cache").init(local.config));
+				getCacheManager().addCacheIfAbsent(createObject("java", "net.sf.ehcache.Cache").init(local.config));
 			} else {
-				getInstance().addCacheIfAbsent(arguments.name);
+				getCacheManager().addCacheIfAbsent(arguments.name);
 			}
 		}
 
@@ -29,34 +29,30 @@ component {
 	boolean function cacheExists(required string name, boolean deepSearch = false) {
 		if(arguments.deepSearch) {
 			for(local.managerName in getManagerNames()) {
-				if(getInstance(local.managerName).cacheExists(arguments.name)) {
+				if(getCacheManager(local.managerName).cacheExists(arguments.name)) {
 					return true;
 				}
 			}
 		}
 
-		return getInstance().cacheExists(arguments.name);
+		return getCacheManager().cacheExists(arguments.name);
 	}
 
 	Manager function createFromPath(required string path) {
-		return new Manager().setInstance(createObject("java", "net.sf.ehcache.CacheManager").newInstance(arguments.path));
+		return new Manager().setCacheManager(createObject("java", "net.sf.ehcache.CacheManager").newInstance(arguments.path));
 	}
 
 	Manager function createFromXML(required string xml) {
 		local.is = createObject("java", "java.io.ByteArrayInputStream").init(arguments.xml.getBytes());
 
-		return new Manager().setInstance(createObject("java", "net.sf.ehcache.CacheManager").newInstance(local.is));
+		return new Manager().setCacheManager(createObject("java", "net.sf.ehcache.CacheManager").newInstance(local.is));
 	}
 
 	Cache function getCache(required string name) {
 		return new Cache(name = arguments.name, managerName = getName());
 	}
 
-	array function getCacheNames() {
-		return getInstance().getCacheNames();
-	}
-
-	any function getInstance(string name) {
+	any function getCacheManager(string name) {
 		if(structKeyExists(arguments, "name")) {
 			return createObject("java", "net.sf.ehcache.CacheManager").getCacheManager(arguments.name);
 		} else if(structKeyExists(variables, "cm")) {
@@ -66,8 +62,12 @@ component {
 		return createObject("java", "net.sf.ehcache.CacheManager").getInstance();
 	}
 
+	array function getCacheNames() {
+		return getCacheManager().getCacheNames();
+	}
+
 	Manager function getManager(required string name) {
-		return new Manager().setInstance(getInstance(arguments.name));
+		return new Manager().setCacheManager(getCacheManager(arguments.name));
 	}
 
 	array function getManagerNames() {
@@ -83,7 +83,7 @@ component {
 	}
 
 	string function getName() {
-		return getInstance().getName();
+		return getCacheManager().getName();
 	}
 
 	boolean function managerExists(required string name) {
@@ -91,10 +91,10 @@ component {
 	}
 
 	void function removeCache(required string name) {
-		getInstance().removeCache(arguments.name);
+		getCacheManager().removeCache(arguments.name);
 	}
 
-	Manager function setInstance(required any cacheManager) {
+	Manager function setCacheManager(required any cacheManager) {
 		variables.cm = arguments.cacheManager;
 
 		return this;

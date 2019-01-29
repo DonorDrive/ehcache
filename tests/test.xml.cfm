@@ -1,32 +1,14 @@
-<ehcache name="mxunitCacheManager">
+<ehcache name="mxunitCacheManager" maxBytesLocalHeap="100M">
 	<defaultCache
 		clearOnFlush="true"
-		diskExpiryThreadIntervalSeconds="3600"
-		diskPersistent="false"
-		diskSpoolBufferSizeMB="30"
-		eternal="false"
-		maxElementsInMemory="10000"
-		maxElementsOnDisk="10000000"
-		memoryStoreEvictionPolicy="LRU"
 		overflowToDisk="false"
-		timeToIdleSeconds="86400"
-		timeToLiveSeconds="86400"
 		statistics="false">
-		<searchable
-			allowDynamicIndexing="true"
-			keys="true"
-			values="true"
-		/>
+		<searchable allowDynamicIndexing="true" keys="true" values="false" />
 	</defaultCache>
 	<cache
 		name="mxunitCache"
-		maxEntriesLocalHeap="10000"
 		timeToIdleSeconds="3600"
 		timeToLiveSeconds="3600">
-		<searchable
-			allowDynamicIndexing="true"
-			keys="true"
-			values="true"
-		/>
+		<searchable allowDynamicIndexing="true" keys="true" values="false" />
 	</cache>
 </ehcache>
