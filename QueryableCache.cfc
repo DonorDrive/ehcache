@@ -1,7 +1,12 @@
-component extends = "lib.sql.QueryableCache" {
+component accessors = "true" extends = "lib.sql.QueryableCache" {
+
+	property name = "timeToIdleSeconds" type = "numeric";
+	property name = "timeToLiveSeconds" type = "numeric";
 
 	QueryableCache function init(required string name, string managerName) {
 		variables.cache = new Cache(argumentCollection = arguments);
+		variables.normalizer = createObject("java", "java.text.Normalizer");
+		variables.normalizerForm = createObject("java", "java.text.Normalizer$Form").NFD;
 
 		return this;
 	}
@@ -35,7 +40,7 @@ component extends = "lib.sql.QueryableCache" {
 					case "char":
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
 							// lower casing ensures a case-insensitive sort
-							local.indexedAttributes.put(local.field, javaCast("char", lCase(local.elementValue[local.field])));
+							local.indexedAttributes.put(local.field, javaCast("char", stripAccents(lCase(local.elementValue[local.field]))));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("char", javaCast("null", "")));
 						}
@@ -79,7 +84,7 @@ component extends = "lib.sql.QueryableCache" {
 					default:
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
 							// lower casing ensures a case-insensitive sort
-							local.indexedAttributes.put(local.field, javaCast("string", lCase(local.elementValue[local.field])));
+							local.indexedAttributes.put(local.field, javaCast("string", stripAccents(lCase(local.elementValue[local.field]))));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("string", javaCast("null", "")));
 						}
@@ -169,9 +174,15 @@ component extends = "lib.sql.QueryableCache" {
 							local.whereValue = listAppend(local.whereValue, "(int)" & javaCast("int", local.value));
 							break;
 						default:
-							// default to string/char - replacing SQL wildcards w/ ILIKE wildcards
-							local.value = replace(local.value, "%", "*", "all");
-							local.value = replace(local.value, "_", "?", "all");
+							// default to string/char
+							local.value = stripAccents(local.value);
+
+							if(local.criteria[local.i].operator == "LIKE") {
+								// replacing SQL wildcards w/ ILIKE wildcards
+								local.value = replace(local.value, "%", "*", "all");
+								local.value = replace(local.value, "_", "?", "all");
+							}
+
 							local.whereValue = listAppend(local.whereValue, "'" & local.value & "'");
 							break;
 					};
@@ -208,7 +219,6 @@ component extends = "lib.sql.QueryableCache" {
 							.execute();
 			}
 
-			arguments.offset = arguments.offset - 1;
 			if(arguments.offset > 0) {
 				if(arguments.limit <= 0) {
 					throw(type = "lib.ehcache.InvalidLimitException", message = "Limit must be furnished when offset is defined");
@@ -325,6 +335,22 @@ component extends = "lib.sql.QueryableCache" {
 
 	void function putRow(required struct row) {
 		if(structKeyExists(arguments.row, getIdentifierField())) {
+			if(!structKeyExists(arguments, "timeToIdleSeconds")) {
+				if(structKeyExists(variables, "timeToIdleSeconds")) {
+					arguments.timeToIdleSeconds = variables.timeToIdleSeconds;
+				} else {
+					arguments.timeToIdleSeconds = variables.cache.getCache().getCacheConfiguration().getTimeToIdleSeconds();
+				}
+			}
+
+			if(!structKeyExists(arguments, "timeToLiveSeconds")) {
+				if(structKeyExists(variables, "timeToLiveSeconds")) {
+					arguments.timeToLiveSeconds = variables.timeToLiveSeconds;
+				} else {
+					arguments.timeToLiveSeconds = variables.cache.getCache().getCacheConfiguration().getTimeToLiveSeconds();
+				}
+			}
+
 			local.rowKey = getRowKey(argumentCollection = arguments.row);
 
 			variables.cache.put(local.rowKey, arguments.row);
@@ -376,6 +402,15 @@ component extends = "lib.sql.QueryableCache" {
 					.build();
 
 		return this;
+	}
+
+	string function stripAccents(required string input) {
+		/*
+			what's goin' on:
+			- https://memorynotfound.com/remove-accents-diacritics-from-string/
+			- https://stackoverflow.com/questions/5697171/regex-what-is-incombiningdiacriticalmarks
+		*/
+		return variables.normalizer.normalize(javaCast("string", arguments.input), variables.normalizerForm).replaceAll("\p{InCombiningDiacriticalMarks}+", "");
 	}
 
 }

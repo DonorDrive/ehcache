@@ -23,7 +23,7 @@ component extends = "mxunit.framework.TestCase" {
 				queryAddRow(
 					variables.query,
 					{
-						"id": createUUID(),
+						"id": (local.i == 500 ? "Šťŕĭńġ" : createUUID()),
 						"bar": (!randRange(1, 3) % 2 ? local.i % 2 : javaCast("null", "")),
 						"foo": local.i,
 						"createdTimestamp": (!randRange(1, 3) % 2 ? variables.now : javaCast("null", "")),
@@ -36,7 +36,10 @@ component extends = "mxunit.framework.TestCase" {
 
 			variables.queryable = new lib.sql.QueryOfQueries(variables.query).setIdentifierField("id");
 
-			variables.cache.setQueryable(variables.queryable).seedFromQueryable();
+			variables.cache
+				.setTimeToIdleSeconds(180)
+				.setQueryable(variables.queryable)
+				.seedFromQueryable();
 		} catch(Any e) {
 			variables.exception = e;
 		}
@@ -186,7 +189,7 @@ component extends = "mxunit.framework.TestCase" {
 	}
 
 	function test_select_orderBy_limit_offset() {
-		local.result = variables.cache.select().orderBy("foo ASC").execute(limit = 10, offset = 11);
+		local.result = variables.cache.select().orderBy("foo ASC").execute(limit = 10, offset = 10);
 
 		debug(local.result);
 		assertEquals(10, local.result.recordCount);
@@ -272,6 +275,17 @@ component extends = "mxunit.framework.TestCase" {
 		local.result = variables.cache.select().where(local.where).orderBy("foo ASC").execute();
 
 		assertTrue(local.result.recordCount >= 1);
+
+		debug(local.where);
+		debug(local.result);
+	}
+
+	function test_select_where_DDMAINT_21917() {
+		local.where = "id = 'Šťŕĭńġ'";
+		local.result = variables.cache.select().where(local.where).execute();
+
+		assertEquals(1, local.result.recordCount);
+		assertEquals(500, local.result.foo);
 
 		debug(local.where);
 		debug(local.result);
