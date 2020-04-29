@@ -10,7 +10,7 @@ component {
 		return this;
 	}
 
-	Cache function addCache(required string name, string copyFrom) {
+	Manager function addCache(required string name, string copyFrom) {
 		if(!getCacheManager().cacheExists(arguments.name)) {
 			if(structKeyExists(arguments, "copyFrom")) {
 				local.config = getCacheManager().getCache(arguments.copyFrom).getCacheConfiguration().clone();
@@ -23,7 +23,7 @@ component {
 			}
 		}
 
-		return getCache(arguments.name);
+		return this;
 	}
 
 	boolean function cacheExists(required string name, boolean deepSearch = false) {
@@ -84,6 +84,10 @@ component {
 
 	string function getName() {
 		return getCacheManager().getName();
+	}
+
+	QueryableCache function getQueryableCache(required string name) {
+		return new QueryableCache(name = arguments.name, managerName = getName());
 	}
 
 	boolean function managerExists(required string name) {
