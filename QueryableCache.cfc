@@ -39,7 +39,6 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 						break;
 					case "char":
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
-							// lower casing ensures a case-insensitive sort
 							local.indexedAttributes.put(local.field, javaCast("char", normalize(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("char", javaCast("null", "")));
@@ -83,7 +82,6 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 						break;
 					default:
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
-							// lower casing ensures a case-insensitive sort
 							local.indexedAttributes.put(local.field, javaCast("string", normalize(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("string", javaCast("null", "")));
