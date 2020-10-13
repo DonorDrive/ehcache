@@ -40,7 +40,7 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 					case "char":
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
 							// lower casing ensures a case-insensitive sort
-							local.indexedAttributes.put(local.field, javaCast("char", stripAccents(lCase(local.elementValue[local.field]))));
+							local.indexedAttributes.put(local.field, javaCast("char", normalize(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("char", javaCast("null", "")));
 						}
@@ -84,7 +84,7 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 					default:
 						if(structKeyExists(local.elementValue, local.field) && len(local.elementValue[local.field]) > 0) {
 							// lower casing ensures a case-insensitive sort
-							local.indexedAttributes.put(local.field, javaCast("string", stripAccents(lCase(local.elementValue[local.field]))));
+							local.indexedAttributes.put(local.field, javaCast("string", normalize(local.elementValue[local.field])));
 						} else {
 							local.indexedAttributes.put(local.field, javaCast("string", javaCast("null", "")));
 						}
@@ -175,7 +175,7 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 							break;
 						default:
 							// default to string/char
-							local.value = stripAccents(local.value);
+							local.value = normalize(local.value);
 
 							if(local.criteria[local.i].operator == "LIKE") {
 								// replacing SQL wildcards w/ ILIKE wildcards
@@ -302,6 +302,7 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 					cached: !structKeyExists(local, "cacheException"),
 					engine: "ehcache",
 					recordCount: arrayLen(local.resultsArray),
+					search: local.sql,
 					totalRecordCount: (structKeyExists(local, "resultsLength") ? local.resultsLength : 0)
 				});
 
@@ -314,23 +315,19 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 		}
 	}
 
-	string function getRowKey() {
-		local.rowKey = variables.rowKeyMask;
-
-		local.pos = find("{", local.rowKey);
-
-		do {
-			local.end = find("}", local.rowKey, local.pos);
-			local.keyArg = mid(local.rowKey, local.pos + 1, local.end - local.pos - 1);
-			local.rowKey = replace(local.rowKey, "{#local.keyArg#}", REReplace(arguments[local.keyArg], "[^A-Za-z0-9]", "", "all"));
-			local.pos = find("{", local.rowKey);
-		} while(local.pos > 0);
-
-		return local.rowKey;
-	}
-
 	boolean function isClustered() {
 		return variables.cache.getCache().isTerracottaClustered();
+	}
+
+	private string function normalize(required string input) {
+		arguments.input = lCase(arguments.input);
+
+		/*
+			what's goin' on:
+			- https://memorynotfound.com/remove-accents-diacritics-from-string/
+			- https://stackoverflow.com/questions/5697171/regex-what-is-incombiningdiacriticalmarks
+		*/
+		return variables.normalizer.normalize(javaCast("string", arguments.input), variables.normalizerForm).replaceAll("\p{InCombiningDiacriticalMarks}+", "");
 	}
 
 	void function putRow(required struct row) {
@@ -361,8 +358,8 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 		variables.cache.remove(getRowKey(argumentCollection = arguments));
 	}
 
-	void function seedFromQueryable(boolean overwrite = false) {
-		for(local.row in getQueryable().select().execute()) {
+	void function seedFromQueryable(boolean overwrite = false, string where = "") {
+		for(local.row in getQueryable().select().where(arguments.where).execute()) {
 			local.key = getRowKey(argumentCollection = local.row);
 
 			if(arguments.overwrite || !variables.cache.containsKey(local.key)) {
@@ -402,15 +399,6 @@ component accessors = "true" extends = "lib.sql.QueryableCache" {
 					.build();
 
 		return this;
-	}
-
-	string function stripAccents(required string input) {
-		/*
-			what's goin' on:
-			- https://memorynotfound.com/remove-accents-diacritics-from-string/
-			- https://stackoverflow.com/questions/5697171/regex-what-is-incombiningdiacriticalmarks
-		*/
-		return variables.normalizer.normalize(javaCast("string", arguments.input), variables.normalizerForm).replaceAll("\p{InCombiningDiacriticalMarks}+", "");
 	}
 
 }

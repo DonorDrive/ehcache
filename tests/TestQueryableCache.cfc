@@ -114,7 +114,7 @@ component extends = "mxunit.framework.TestCase" {
 		assertEquals(1000, listLen(local.keyList));
 	}
 
-	function test_seedFromQueryable_overwrite() {
+	function test_seedFromQueryable_overwrite_where() {
 		variables.cache.seedFromQueryable();
 
 		local.key = listFirst(variables.testCache.keyList());
@@ -125,7 +125,7 @@ component extends = "mxunit.framework.TestCase" {
 
 //		debug(local.element);
 
-		variables.cache.seedFromQueryable(overwrite = true);
+		variables.cache.seedFromQueryable(overwrite = true, where = "id = #local.element.id#");
 
 		local.overwriteElement = variables.testCache.get(local.key);
 
@@ -199,13 +199,14 @@ component extends = "mxunit.framework.TestCase" {
 	}
 
 	function test_select_where() {
-		local.result = variables.cache.select().where("id = #variables.query.id#").execute();
+		local.row = queryGetRow(variables.query, 2);
+		local.result = variables.cache.select().where("id = #local.row.id#").execute();
 
 //		debug(local.result);
-		assertEquals(variables.query.id, local.result.id);
-		assertEquals(variables.query.createdTimestamp, local.result.createdTimestamp);
-		assertEquals(variables.query.createdDate, local.result.createdDate);
-		assertEquals(variables.query.createdTime, local.result.createdTime);
+		assertEquals(local.row.id, local.result.id);
+		assertEquals(local.row.createdTimestamp, local.result.createdTimestamp);
+		assertEquals(local.row.createdDate, local.result.createdDate);
+		assertEquals(local.row.createdTime, local.result.createdTime);
 		assertEquals(1, local.result.recordCount);
 	}
 
