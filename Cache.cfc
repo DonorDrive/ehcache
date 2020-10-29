@@ -29,7 +29,7 @@ component accessors = "true" implements = "lib.util.IContainer" {
 	}
 
 	boolean function containsKey(required string key) {
-		return variables.cache.isKeyInCache(arguments.key);
+		return variables.cache.isKeyInCache(getKey(arguments.key));
 	}
 
 	void function destroy() {
@@ -45,11 +45,11 @@ component accessors = "true" implements = "lib.util.IContainer" {
 	}
 
 	any function getElement(required string key) {
-		return variables.cache.get(arguments.key);
+		return variables.cache.get(getKey(arguments.key));
 	}
 
 	numeric function getElementSize(required string key) {
-		local.element = variables.cache.get(arguments.key);
+		local.element = variables.cache.get(getKey(arguments.key));
 
 		if(!isNull(local.element)) {
 			return local.element.getSerializedSize();
@@ -64,6 +64,10 @@ component accessors = "true" implements = "lib.util.IContainer" {
 
 	any function getCacheManager() {
 		return variables.cacheManager;
+	}
+
+	private string function getKey(required string key) {
+		return lCase(arguments.key);
 	}
 
 	string function getName() {
@@ -98,7 +102,7 @@ component accessors = "true" implements = "lib.util.IContainer" {
 		variables.cache.put(
 			createObject("java", "net.sf.ehcache.Element")
 				.init(
-					arguments.key,
+					getKey(arguments.key),
 					arguments.value,
 					javaCast("int", arguments.timeToIdleSeconds),
 					javaCast("int", arguments.timeToLiveSeconds)
@@ -119,7 +123,7 @@ component accessors = "true" implements = "lib.util.IContainer" {
 	}
 
 	void function remove(required string key) {
-		variables.cache.remove(arguments.key);
+		variables.cache.remove(getKey(arguments.key));
 	}
 
 	struct function values() {
